@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""One-command launcher for Image Organizer v2 GUI."""
+"""One-command launcher for Image Organizer v4 GUI."""
 
 from __future__ import annotations
 

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import shutil
 import threading
 from dataclasses import dataclass
@@ -12,169 +13,187 @@ from typing import Iterable
 
 SUPPORTED_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tiff"}
 
-PEOPLE_KEYWORDS = {
-    "person",
-    "man",
-    "woman",
-    "boy",
-    "girl",
-    "bride",
-    "groom",
-    "scuba diver",
-    "baseball player",
+CATEGORY_KEYWORDS: dict[str, set[str]] = {
+    "people": {
+        "person",
+        "man",
+        "woman",
+        "boy",
+        "girl",
+        "bride",
+        "groom",
+        "scuba diver",
+        "baseball player",
+        "swimmer",
+        "skier",
+        "soldier",
+        "academic gown",
+    },
+    "scenery": {
+        "mountain",
+        "valley",
+        "volcano",
+        "cliff",
+        "seashore",
+        "lakeside",
+        "sandbar",
+        "promontory",
+        "geyser",
+        "alp",
+        "coral reef",
+        "beach",
+        "forest",
+        "desert",
+        "ocean",
+        "rainforest",
+        "waterfall",
+    },
+    "animals": {
+        "goldfish",
+        "tabby",
+        "persian cat",
+        "siamese cat",
+        "egyptian cat",
+        "lion",
+        "tiger",
+        "cheetah",
+        "bear",
+        "zebra",
+        "hippopotamus",
+        "ox",
+        "ram",
+        "llama",
+        "camel",
+        "elephant",
+        "giant panda",
+        "koala",
+        "otter",
+        "chimpanzee",
+        "gorilla",
+        "dog",
+        "retriever",
+        "shepherd",
+        "poodle",
+        "wolf",
+        "fox",
+        "hare",
+        "rabbit",
+        "deer",
+        "squirrel",
+        "bird",
+        "eagle",
+        "parrot",
+        "owl",
+        "duck",
+        "penguin",
+        "flamingo",
+        "shark",
+        "ray",
+        "snake",
+        "lizard",
+        "turtle",
+        "insect",
+        "butterfly",
+        "bee",
+        "spider",
+    },
+    "vehicles": {
+        "car wheel",
+        "sports car",
+        "convertible",
+        "jeep",
+        "limousine",
+        "cab",
+        "minivan",
+        "truck",
+        "pickup",
+        "trailer truck",
+        "fire engine",
+        "ambulance",
+        "bus",
+        "school bus",
+        "trolleybus",
+        "motor scooter",
+        "moped",
+        "mountain bike",
+        "bicycle",
+        "airliner",
+        "warplane",
+        "airship",
+        "space shuttle",
+        "bullet train",
+        "steam locomotive",
+        "submarine",
+        "boat",
+        "catamaran",
+        "sailboat",
+        "speedboat",
+        "tractor",
+        "forklift",
+        "locomotive",
+    },
+    "food": {
+        "pizza",
+        "cheeseburger",
+        "hotdog",
+        "french loaf",
+        "bagel",
+        "pretzel",
+        "ice cream",
+        "trifle",
+        "potpie",
+        "carbonara",
+        "guacamole",
+        "consomme",
+        "red wine",
+        "espresso",
+        "banana",
+        "pineapple",
+        "orange",
+        "lemon",
+        "pomegranate",
+        "strawberry",
+        "fig",
+        "granny smith",
+        "mushroom",
+        "broccoli",
+        "cauliflower",
+        "artichoke",
+        "soup bowl",
+        "plate",
+        "dining table",
+    },
+    "buildings": {
+        "church",
+        "mosque",
+        "palace",
+        "monastery",
+        "dome",
+        "library",
+        "planetarium",
+        "greenhouse",
+        "movie theater",
+        "restaurant",
+        "lighthouse",
+        "castle",
+        "barn",
+        "boathouse",
+        "schoolhouse",
+        "bell cote",
+        "bridge",
+        "suspension bridge",
+        "viaduct",
+        "pier",
+        "fountain",
+        "gazebo",
+        "patio",
+        "skyscraper",
+        "tower",
+        "arch",
+    },
 }
 
-SCENERY_KEYWORDS = {
-    "mountain",
-    "valley",
-    "volcano",
-    "cliff",
-    "seashore",
-    "lakeside",
-    "sandbar",
-    "promontory",
-    "geyser",
-    "alp",
-    "coral reef",
-    "beach",
-    "forest",
-}
-
-ANIMAL_KEYWORDS = {
-    "goldfish",
-    "tabby",
-    "persian cat",
-    "siamese cat",
-    "egyptian cat",
-    "lion",
-    "tiger",
-    "cheetah",
-    "brown bear",
-    "american black bear",
-    "sloth bear",
-    "zebra",
-    "hippopotamus",
-    "ox",
-    "ram",
-    "llama",
-    "camel",
-    "elephant",
-    "giant panda",
-    "koala",
-    "otter",
-    "chimpanzee",
-    "gorilla",
-    "dog",
-    "retriever",
-    "shepherd",
-    "poodle",
-    "wolf",
-    "fox",
-    "hare",
-    "rabbit",
-    "deer",
-    "squirrel",
-    "bird",
-    "eagle",
-    "parrot",
-    "owl",
-    "duck",
-    "penguin",
-    "flamingo",
-    "shark",
-    "ray",
-}
-
-VEHICLE_KEYWORDS = {
-    "car wheel",
-    "sports car",
-    "convertible",
-    "jeep",
-    "limousine",
-    "cab",
-    "minivan",
-    "truck",
-    "pickup",
-    "trailer truck",
-    "fire engine",
-    "ambulance",
-    "bus",
-    "school bus",
-    "trolleybus",
-    "motor scooter",
-    "moped",
-    "mountain bike",
-    "bicycle-built-for-two",
-    "airliner",
-    "warplane",
-    "airship",
-    "space shuttle",
-    "bullet train",
-    "steam locomotive",
-    "submarine",
-    "boat",
-    "catamaran",
-    "sailboat",
-    "speedboat",
-}
-
-FOOD_KEYWORDS = {
-    "pizza",
-    "cheeseburger",
-    "hotdog",
-    "french loaf",
-    "bagel",
-    "pretzel",
-    "ice cream",
-    "trifle",
-    "potpie",
-    "carbonara",
-    "guacamole",
-    "consomme",
-    "red wine",
-    "espresso",
-    "cup",
-    "plate",
-    "dining table",
-    "banana",
-    "pineapple",
-    "orange",
-    "lemon",
-    "pomegranate",
-    "strawberry",
-    "fig",
-    "granny smith",
-    "mushroom",
-    "broccoli",
-    "cauliflower",
-    "artichoke",
-}
-
-BUILDING_KEYWORDS = {
-    "church",
-    "mosque",
-    "palace",
-    "monastery",
-    "dome",
-    "library",
-    "planetarium",
-    "greenhouse",
-    "movie theater",
-    "restaurant",
-    "lighthouse",
-    "castle",
-    "barn",
-    "boathouse",
-    "schoolhouse",
-    "bell cote",
-    "bridge",
-    "suspension bridge",
-    "viaduct",
-    "pier",
-    "fountain",
-    "gazebo",
-    "patio",
-}
+TOKEN_SPLIT_RE = re.compile(r"[^a-z0-9]+")
 
 
 @dataclass
@@ -182,10 +201,11 @@ class ClassificationResult:
     label: str
     confidence: float
     category: str
+    category_score: float
 
 
 class ImageOrganizer:
-    def __init__(self, topk: int = 5) -> None:
+    def __init__(self, topk: int = 8) -> None:
         try:
             from torchvision import models
         except ImportError as exc:
@@ -218,40 +238,64 @@ class ImageOrganizer:
 
         conf, idx = torch.topk(probs, self.topk)
         labels = [self.labels[i] for i in idx[0].tolist()]
-        confidences = conf[0].tolist()
+        confidences = [float(v) for v in conf[0].tolist()]
 
         top_label = labels[0]
-        top_conf = float(confidences[0])
-        category = self._map_category(labels)
+        top_conf = confidences[0]
+        category, category_score = self._map_category(labels, confidences)
 
-        return ClassificationResult(label=top_label, confidence=top_conf, category=category)
+        return ClassificationResult(
+            label=top_label,
+            confidence=top_conf,
+            category=category,
+            category_score=category_score,
+        )
 
-    def _map_category(self, labels: Iterable[str]) -> str:
-        normalized = {label.lower().strip() for label in labels}
+    def _map_category(self, labels: Iterable[str], confidences: Iterable[float]) -> tuple[str, float]:
+        scores = {category: 0.0 for category in CATEGORY_KEYWORDS}
 
-        if self._matches(normalized, PEOPLE_KEYWORDS):
-            return "people"
-        if self._matches(normalized, SCENERY_KEYWORDS):
-            return "scenery"
-        if self._matches(normalized, ANIMAL_KEYWORDS):
-            return "animals"
-        if self._matches(normalized, VEHICLE_KEYWORDS):
-            return "vehicles"
-        if self._matches(normalized, FOOD_KEYWORDS):
-            return "food"
-        if self._matches(normalized, BUILDING_KEYWORDS):
-            return "buildings"
+        for label, confidence in zip(labels, confidences):
+            normalized_label = self._normalize_text(label)
+            label_tokens = self._tokens(normalized_label)
+            if not normalized_label:
+                continue
 
-        # If neither matches, default to objects.
-        return "objects"
+            for category, keywords in CATEGORY_KEYWORDS.items():
+                for keyword in keywords:
+                    normalized_keyword = self._normalize_text(keyword)
+                    if not normalized_keyword:
+                        continue
+
+                    keyword_tokens = self._tokens(normalized_keyword)
+
+                    if normalized_label == normalized_keyword:
+                        scores[category] += confidence * 1.3
+                        continue
+
+                    if normalized_keyword in normalized_label or normalized_label in normalized_keyword:
+                        scores[category] += confidence
+                        continue
+
+                    overlap = len(label_tokens & keyword_tokens)
+                    if overlap:
+                        token_ratio = overlap / max(len(keyword_tokens), len(label_tokens))
+                        scores[category] += confidence * token_ratio * 0.75
+
+        best_category = max(scores, key=scores.get, default="objects")
+        best_score = scores.get(best_category, 0.0)
+
+        if best_score <= 0:
+            return "objects", 0.0
+
+        return best_category, best_score
 
     @staticmethod
-    def _matches(labels: Iterable[str], keywords: set[str]) -> bool:
-        for label in labels:
-            for keyword in keywords:
-                if label == keyword or keyword in label or label in keyword:
-                    return True
-        return False
+    def _normalize_text(text: str) -> str:
+        return " ".join(TOKEN_SPLIT_RE.sub(" ", text.lower()).split())
+
+    @staticmethod
+    def _tokens(text: str) -> set[str]:
+        return set(text.split())
 
 
 def iter_images(source_dir: Path) -> Iterable[Path]:
@@ -278,6 +322,7 @@ def organize(
     output_dir: Path,
     move: bool,
     min_confidence: float,
+    min_category_score: float,
 ) -> None:
     organizer = ImageOrganizer()
     action = shutil.move if move else shutil.copy2
@@ -288,7 +333,10 @@ def organize(
     for image_path in iter_images(source_dir):
         total += 1
         result = organizer.classify(image_path)
-        category = result.category if result.confidence >= min_confidence else "unknown"
+        if result.confidence >= min_confidence and result.category_score >= min_category_score:
+            category = result.category
+        else:
+            category = "unknown"
 
         category_dir = output_dir / category
         category_dir.mkdir(parents=True, exist_ok=True)
@@ -298,7 +346,7 @@ def organize(
 
         print(
             f"[{category.upper()}] {image_path} -> {destination} "
-            f"(label={result.label}, conf={result.confidence:.2%})"
+            f"(label={result.label}, conf={result.confidence:.2%}, category_score={result.category_score:.3f})"
         )
 
     print(f"\nDone. Processed {total} image(s).")
@@ -328,7 +376,13 @@ def parse_args() -> argparse.Namespace:
         "--min-confidence",
         type=float,
         default=0.20,
-        help="Minimum confidence for category assignment, else goes to unknown (default: 0.20)",
+        help="Minimum model confidence, else goes to unknown (default: 0.20)",
+    )
+    parser.add_argument(
+        "--min-category-score",
+        type=float,
+        default=0.12,
+        help="Minimum category match score, else goes to unknown (default: 0.12)",
     )
     parser.add_argument(
         "--gui",
@@ -347,13 +401,14 @@ def launch_gui() -> None:
 
     root = tk.Tk()
     root.title("Image Organizer Pro")
-    root.geometry("920x460")
+    root.geometry("920x520")
     root.configure(bg="#0f172a")
 
     source_var = tk.StringVar()
     output_var = tk.StringVar(value=str(Path("organized_images").resolve()))
     move_var = tk.BooleanVar(value=False)
     confidence_var = tk.StringVar(value="0.20")
+    category_score_var = tk.StringVar(value="0.12")
     status_var = tk.StringVar(value="Ready")
 
     style = ttk.Style(root)
@@ -402,6 +457,16 @@ def launch_gui() -> None:
             messagebox.showerror("Input error", "Min confidence must be between 0 and 1.")
             return
 
+        try:
+            min_category_score = float(category_score_var.get())
+        except ValueError:
+            messagebox.showerror("Input error", "Category score must be a number.")
+            return
+
+        if not (0.0 <= min_category_score <= 1.0):
+            messagebox.showerror("Input error", "Category score must be between 0 and 1.")
+            return
+
         start_btn.configure(state="disabled")
         status_var.set("Processing...")
 
@@ -412,6 +477,7 @@ def launch_gui() -> None:
                     output_dir=output_path,
                     move=move_var.get(),
                     min_confidence=min_confidence,
+                    min_category_score=min_category_score,
                 )
             except Exception as exc:  # runtime errors should still be shown in GUI
                 root.after(
@@ -441,7 +507,7 @@ def launch_gui() -> None:
     ttk.Label(outer, text="Image Organizer Pro", style="Title.TLabel").pack(anchor="w")
     ttk.Label(
         outer,
-        text="更多分类、更高颜值：people / scenery / animals / vehicles / food / buildings / objects",
+        text="v4.0 精准分类：融合Top-K结果 + 语义打分，减少误分类和漏识别",
         style="Hint.TLabel",
     ).pack(anchor="w", pady=(4, 14))
 
@@ -465,15 +531,20 @@ def launch_gui() -> None:
         row=2, column=1, sticky="w", padx=10
     )
 
+    ttk.Label(frm, text="Min category score (0~1)", style="Main.TLabel").grid(row=3, column=0, sticky="w", pady=8)
+    ttk.Entry(frm, textvariable=category_score_var, width=18, style="Main.TEntry").grid(
+        row=3, column=1, sticky="w", padx=10
+    )
+
     ttk.Checkbutton(
         frm,
         text="Move files (instead of copy)",
         variable=move_var,
         style="Main.TCheckbutton",
-    ).grid(row=3, column=1, sticky="w", padx=10, pady=8)
+    ).grid(row=4, column=1, sticky="w", padx=10, pady=8)
 
     action_row = ttk.Frame(frm, style="Card.TFrame")
-    action_row.grid(row=4, column=1, sticky="ew", padx=10, pady=(16, 0))
+    action_row.grid(row=5, column=1, sticky="ew", padx=10, pady=(16, 0))
 
     start_btn = ttk.Button(action_row, text="Start organizing", command=run_task, style="Main.TButton")
     start_btn.pack(side="left")
@@ -497,12 +568,15 @@ def main() -> None:
         raise SystemExit(f"Source directory does not exist: {args.source}")
     if not (0.0 <= args.min_confidence <= 1.0):
         raise SystemExit("--min-confidence must be between 0 and 1")
+    if not (0.0 <= args.min_category_score <= 1.0):
+        raise SystemExit("--min-category-score must be between 0 and 1")
 
     organize(
         source_dir=args.source,
         output_dir=args.output,
         move=args.move,
         min_confidence=args.min_confidence,
+        min_category_score=args.min_category_score,
     )
 
 
