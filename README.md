@@ -1,5 +1,5 @@
 
-# 图片整理器 v2.0（CLI + GUI）
+# 图片整理器 v2.1 fixed（CLI + GUI）
 
 根据图片内容自动分类到：
 
@@ -13,6 +13,11 @@
 - `objects`（物品）
 - `unknown`（低置信度）
 
+
+## 2.1 fixed 更新
+
+- 修复 `run.py` 无法启动 GUI 的问题（`--gui` 现已可用）。
+- GUI 中新增参数校验与状态提示，避免卡死并显示错误信息。
 
 ## 2.0 更新
 
@@ -80,4 +85,3 @@ python organize_images.py ./photos -o ./sorted_photos
 - 模型使用 `torchvision` 预训练 `MobileNetV3-Small`。
 - 分类逻辑：先识别 ImageNet 标签，再映射为人物/风景/物品三类。
 - 首次运行可能下载模型权重。
-
