@@ -190,6 +190,34 @@ CATEGORY_KEYWORDS: dict[str, set[str]] = {
         "skyscraper",
         "tower",
         "arch",
+        "building",
+        "apartment",
+        "house",
+        "office building",
+        "stadium",
+        "airport terminal",
+    },
+    "objects": {
+        "laptop",
+        "computer",
+        "keyboard",
+        "mouse",
+        "phone",
+        "camera",
+        "book",
+        "chair",
+        "table",
+        "lamp",
+        "backpack",
+        "watch",
+        "bottle",
+        "cup",
+        "vase",
+        "sofa",
+        "television",
+        "monitor",
+        "toaster",
+        "microwave",
     },
 }
 
@@ -214,11 +242,18 @@ class ImageOrganizer:
             ) from exc
 
         self.topk = topk
-        self.weights = models.MobileNet_V3_Small_Weights.DEFAULT
-        self.model = models.mobilenet_v3_small(weights=self.weights)
-        self.model.eval()
-        self.preprocess = self.weights.transforms()
-        self.labels = self.weights.meta["categories"]
+        self.models: list[tuple[object, object, str, float]] = []
+
+        # 融合轻量模型 + 高精度模型，降低单模型误判（尤其是人像/建筑/物品）
+        mobilenet_weights = models.MobileNet_V3_Small_Weights.DEFAULT
+        mobilenet_model = models.mobilenet_v3_small(weights=mobilenet_weights)
+        mobilenet_model.eval()
+        self.models.append((mobilenet_model, mobilenet_weights, "mobilenet_v3_small", 0.45))
+
+        resnet_weights = models.ResNet50_Weights.DEFAULT
+        resnet_model = models.resnet50(weights=resnet_weights)
+        resnet_model.eval()
+        self.models.append((resnet_model, resnet_weights, "resnet50", 0.55))
 
     def classify(self, image_path: Path) -> ClassificationResult:
         try:
@@ -230,19 +265,35 @@ class ImageOrganizer:
             ) from exc
 
         image = Image.open(image_path).convert("RGB")
-        tensor = self.preprocess(image).unsqueeze(0)
+        merged_scores: dict[str, float] = {}
+        label_confidence: dict[str, float] = {}
 
-        with torch.no_grad():
-            logits = self.model(tensor)
-            probs = torch.nn.functional.softmax(logits, dim=1)
+        for model, weights, _name, model_weight in self.models:
+            preprocess = weights.transforms()
+            labels = weights.meta["categories"]
+            tensor = preprocess(image).unsqueeze(0)
 
-        conf, idx = torch.topk(probs, self.topk)
-        labels = [self.labels[i] for i in idx[0].tolist()]
-        confidences = [float(v) for v in conf[0].tolist()]
+            with torch.no_grad():
+                logits = model(tensor)
+                probs = torch.nn.functional.softmax(logits, dim=1)
 
-        top_label = labels[0]
-        top_conf = confidences[0]
-        category, category_score = self._map_category(labels, confidences)
+            conf, idx = torch.topk(probs, self.topk)
+            for label_idx, confidence in zip(idx[0].tolist(), conf[0].tolist()):
+                label = labels[label_idx]
+                weighted = float(confidence) * model_weight
+                merged_scores[label] = merged_scores.get(label, 0.0) + weighted
+                label_confidence[label] = max(label_confidence.get(label, 0.0), float(confidence))
+
+        sorted_labels = sorted(merged_scores.items(), key=lambda item: item[1], reverse=True)
+        top_labels = [label for label, _ in sorted_labels[: self.topk]]
+        top_confidences = [label_confidence[label] for label in top_labels]
+
+        if not top_labels:
+            return ClassificationResult(label="object", confidence=0.0, category="objects", category_score=0.0)
+
+        top_label = top_labels[0]
+        top_conf = top_confidences[0]
+        category, category_score = self._map_category(top_labels, top_confidences)
 
         return ClassificationResult(
             label=top_label,
@@ -323,6 +374,7 @@ def organize(
     move: bool,
     min_confidence: float,
     min_category_score: float,
+    allow_unknown: bool,
 ) -> None:
     organizer = ImageOrganizer()
     action = shutil.move if move else shutil.copy2
@@ -335,8 +387,10 @@ def organize(
         result = organizer.classify(image_path)
         if result.confidence >= min_confidence and result.category_score >= min_category_score:
             category = result.category
-        else:
+        elif allow_unknown:
             category = "unknown"
+        else:
+            category = result.category or "objects"
 
         category_dir = output_dir / category
         category_dir.mkdir(parents=True, exist_ok=True)
@@ -375,14 +429,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--min-confidence",
         type=float,
-        default=0.20,
-        help="Minimum model confidence, else goes to unknown (default: 0.20)",
+        default=0.16,
+        help="Minimum model confidence for strict unknown routing (default: 0.16)",
     )
     parser.add_argument(
         "--min-category-score",
         type=float,
-        default=0.12,
-        help="Minimum category match score, else goes to unknown (default: 0.12)",
+        default=0.08,
+        help="Minimum category match score for strict unknown routing (default: 0.08)",
+    )
+    parser.add_argument(
+        "--allow-unknown",
+        action="store_true",
+        help="Allow low-confidence samples to be put into unknown (disabled by default)",
     )
     parser.add_argument(
         "--gui",
@@ -407,8 +466,9 @@ def launch_gui() -> None:
     source_var = tk.StringVar()
     output_var = tk.StringVar(value=str(Path("organized_images").resolve()))
     move_var = tk.BooleanVar(value=False)
-    confidence_var = tk.StringVar(value="0.20")
-    category_score_var = tk.StringVar(value="0.12")
+    confidence_var = tk.StringVar(value="0.16")
+    category_score_var = tk.StringVar(value="0.08")
+    allow_unknown_var = tk.BooleanVar(value=False)
     status_var = tk.StringVar(value="Ready")
 
     style = ttk.Style(root)
@@ -478,6 +538,7 @@ def launch_gui() -> None:
                     move=move_var.get(),
                     min_confidence=min_confidence,
                     min_category_score=min_category_score,
+                    allow_unknown=allow_unknown_var.get(),
                 )
             except Exception as exc:  # runtime errors should still be shown in GUI
                 root.after(
@@ -507,7 +568,7 @@ def launch_gui() -> None:
     ttk.Label(outer, text="Image Organizer Pro", style="Title.TLabel").pack(anchor="w")
     ttk.Label(
         outer,
-        text="v4.0 精准分类：融合Top-K结果 + 语义打分，减少误分类和漏识别",
+        text="v5.0 双模型融合：强化人物/建筑/物品识别，默认不落 unknown",
         style="Hint.TLabel",
     ).pack(anchor="w", pady=(4, 14))
 
@@ -543,8 +604,15 @@ def launch_gui() -> None:
         style="Main.TCheckbutton",
     ).grid(row=4, column=1, sticky="w", padx=10, pady=8)
 
+    ttk.Checkbutton(
+        frm,
+        text="Allow unknown folder (strict mode)",
+        variable=allow_unknown_var,
+        style="Main.TCheckbutton",
+    ).grid(row=5, column=1, sticky="w", padx=10, pady=2)
+
     action_row = ttk.Frame(frm, style="Card.TFrame")
-    action_row.grid(row=5, column=1, sticky="ew", padx=10, pady=(16, 0))
+    action_row.grid(row=6, column=1, sticky="ew", padx=10, pady=(16, 0))
 
     start_btn = ttk.Button(action_row, text="Start organizing", command=run_task, style="Main.TButton")
     start_btn.pack(side="left")
@@ -577,6 +645,7 @@ def main() -> None:
         move=args.move,
         min_confidence=args.min_confidence,
         min_category_score=args.min_category_score,
+        allow_unknown=args.allow_unknown,
     )
 
 
