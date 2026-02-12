@@ -460,7 +460,8 @@ def launch_gui() -> None:
 
     root = tk.Tk()
     root.title("Image Organizer Pro")
-    root.geometry("920x520")
+    root.geometry("980x620")
+    root.minsize(920, 580)
     root.configure(bg="#0f172a")
 
     source_var = tk.StringVar()
@@ -474,13 +475,21 @@ def launch_gui() -> None:
     style = ttk.Style(root)
     style.theme_use("clam")
     style.configure("Main.TFrame", background="#0f172a")
-    style.configure("Card.TFrame", background="#111827")
+    style.configure("Card.TFrame", background="#111827", relief="flat")
+    style.configure("Section.TFrame", background="#0b1220")
     style.configure("Main.TLabel", background="#111827", foreground="#e5e7eb", font=("Segoe UI", 11))
-    style.configure("Title.TLabel", background="#0f172a", foreground="#f8fafc", font=("Segoe UI", 18, "bold"))
-    style.configure("Hint.TLabel", background="#0f172a", foreground="#93c5fd", font=("Segoe UI", 10))
-    style.configure("Main.TButton", font=("Segoe UI", 10, "bold"), padding=(12, 8))
+    style.configure("Title.TLabel", background="#0f172a", foreground="#f8fafc", font=("Segoe UI", 24, "bold"))
+    style.configure("Hint.TLabel", background="#0f172a", foreground="#93c5fd", font=("Segoe UI", 11))
+    style.configure("SectionTitle.TLabel", background="#0b1220", foreground="#bfdbfe", font=("Segoe UI", 10, "bold"))
+    style.configure("Subtle.TLabel", background="#111827", foreground="#9ca3af", font=("Segoe UI", 10))
+    style.configure("Main.TButton", font=("Segoe UI", 10, "bold"), padding=(14, 9), borderwidth=0)
+    style.map("Main.TButton", background=[("active", "#2563eb"), ("!disabled", "#1d4ed8")], foreground=[("!disabled", "#ffffff")])
+    style.configure("Secondary.TButton", font=("Segoe UI", 10, "bold"), padding=(12, 8), borderwidth=0)
+    style.map("Secondary.TButton", background=[("active", "#334155"), ("!disabled", "#1e293b")], foreground=[("!disabled", "#e2e8f0")])
     style.configure("Main.TCheckbutton", background="#111827", foreground="#e5e7eb", font=("Segoe UI", 10))
-    style.configure("Main.TEntry", fieldbackground="#1f2937", foreground="#f9fafb")
+    style.map("Main.TCheckbutton", background=[("active", "#111827")], foreground=[("active", "#f8fafc")])
+    style.configure("Main.TEntry", fieldbackground="#1f2937", foreground="#f9fafb", insertcolor="#f9fafb")
+    style.configure("Status.TLabel", background="#111827", foreground="#34d399", font=("Segoe UI", 10, "bold"))
 
     def choose_source() -> None:
         selected = filedialog.askdirectory(title="Select source directory")
@@ -562,7 +571,7 @@ def launch_gui() -> None:
 
         threading.Thread(target=worker, daemon=True).start()
 
-    outer = ttk.Frame(root, style="Main.TFrame", padding=18)
+    outer = ttk.Frame(root, style="Main.TFrame", padding=22)
     outer.pack(fill="both", expand=True)
 
     ttk.Label(outer, text="Image Organizer Pro", style="Title.TLabel").pack(anchor="w")
@@ -570,55 +579,92 @@ def launch_gui() -> None:
         outer,
         text="v5.0 双模型融合：强化人物/建筑/物品识别，默认不落 unknown",
         style="Hint.TLabel",
-    ).pack(anchor="w", pady=(4, 14))
+    ).pack(anchor="w", pady=(8, 18))
 
-    frm = ttk.Frame(outer, style="Card.TFrame", padding=18)
+    top_meta = ttk.Frame(outer, style="Main.TFrame")
+    top_meta.pack(fill="x", pady=(0, 14))
+    ttk.Label(
+        top_meta,
+        text="支持格式: JPG · PNG · BMP · WEBP · TIFF",
+        style="Hint.TLabel",
+    ).pack(side="left")
+    ttk.Label(
+        top_meta,
+        text="建议：先用复制模式试跑，再决定是否移动原图",
+        style="Hint.TLabel",
+    ).pack(side="right")
+
+    frm = ttk.Frame(outer, style="Card.TFrame", padding=20)
     frm.pack(fill="both", expand=True)
 
-    ttk.Label(frm, text="Source folder", style="Main.TLabel").grid(row=0, column=0, sticky="w", pady=8)
-    ttk.Entry(frm, textvariable=source_var, width=82, style="Main.TEntry").grid(
-        row=0, column=1, padx=10, sticky="ew"
-    )
-    ttk.Button(frm, text="Browse", command=choose_source, style="Main.TButton").grid(row=0, column=2)
+    input_section = ttk.Frame(frm, style="Section.TFrame", padding=14)
+    input_section.grid(row=0, column=0, columnspan=3, sticky="ew", pady=(0, 12))
+    ttk.Label(input_section, text="路径设置", style="SectionTitle.TLabel").grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 8))
 
-    ttk.Label(frm, text="Output folder", style="Main.TLabel").grid(row=1, column=0, sticky="w", pady=8)
-    ttk.Entry(frm, textvariable=output_var, width=82, style="Main.TEntry").grid(
+    ttk.Label(input_section, text="Source folder", style="Main.TLabel").grid(row=1, column=0, sticky="w", pady=8)
+    ttk.Entry(input_section, textvariable=source_var, width=82, style="Main.TEntry").grid(
         row=1, column=1, padx=10, sticky="ew"
     )
-    ttk.Button(frm, text="Browse", command=choose_output, style="Main.TButton").grid(row=1, column=2)
+    ttk.Button(input_section, text="Browse", command=choose_source, style="Secondary.TButton").grid(row=1, column=2)
 
-    ttk.Label(frm, text="Min confidence (0~1)", style="Main.TLabel").grid(row=2, column=0, sticky="w", pady=8)
-    ttk.Entry(frm, textvariable=confidence_var, width=18, style="Main.TEntry").grid(
+    ttk.Label(input_section, text="Output folder", style="Main.TLabel").grid(row=2, column=0, sticky="w", pady=8)
+    ttk.Entry(input_section, textvariable=output_var, width=82, style="Main.TEntry").grid(
+        row=2, column=1, padx=10, sticky="ew"
+    )
+    ttk.Button(input_section, text="Browse", command=choose_output, style="Secondary.TButton").grid(row=2, column=2)
+
+    ttk.Label(input_section, text="不会覆盖原文件，重名将自动追加序号", style="Subtle.TLabel").grid(
+        row=3, column=1, sticky="w", padx=10, pady=(2, 0)
+    )
+
+    threshold_section = ttk.Frame(frm, style="Section.TFrame", padding=14)
+    threshold_section.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(0, 12))
+    ttk.Label(threshold_section, text="阈值设置", style="SectionTitle.TLabel").grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 8))
+
+    ttk.Label(threshold_section, text="Min confidence (0~1)", style="Main.TLabel").grid(row=1, column=0, sticky="w", pady=8)
+    ttk.Entry(threshold_section, textvariable=confidence_var, width=18, style="Main.TEntry").grid(
+        row=1, column=1, sticky="w", padx=10
+    )
+
+    ttk.Label(threshold_section, text="Min category score (0~1)", style="Main.TLabel").grid(row=2, column=0, sticky="w", pady=8)
+    ttk.Entry(threshold_section, textvariable=category_score_var, width=18, style="Main.TEntry").grid(
         row=2, column=1, sticky="w", padx=10
     )
 
-    ttk.Label(frm, text="Min category score (0~1)", style="Main.TLabel").grid(row=3, column=0, sticky="w", pady=8)
-    ttk.Entry(frm, textvariable=category_score_var, width=18, style="Main.TEntry").grid(
-        row=3, column=1, sticky="w", padx=10
-    )
+    ttk.Label(
+        threshold_section,
+        text="建议默认值：0.16 / 0.08（平衡准确率与召回率）",
+        style="Subtle.TLabel",
+    ).grid(row=3, column=1, sticky="w", padx=10, pady=(2, 0))
+
+    option_section = ttk.Frame(frm, style="Section.TFrame", padding=14)
+    option_section.grid(row=2, column=0, columnspan=3, sticky="ew")
+    ttk.Label(option_section, text="运行选项", style="SectionTitle.TLabel").grid(row=0, column=0, sticky="w", pady=(0, 8))
 
     ttk.Checkbutton(
-        frm,
+        option_section,
         text="Move files (instead of copy)",
         variable=move_var,
         style="Main.TCheckbutton",
-    ).grid(row=4, column=1, sticky="w", padx=10, pady=8)
+    ).grid(row=1, column=0, sticky="w", padx=10, pady=6)
 
     ttk.Checkbutton(
-        frm,
+        option_section,
         text="Allow unknown folder (strict mode)",
         variable=allow_unknown_var,
         style="Main.TCheckbutton",
-    ).grid(row=5, column=1, sticky="w", padx=10, pady=2)
+    ).grid(row=2, column=0, sticky="w", padx=10, pady=2)
 
     action_row = ttk.Frame(frm, style="Card.TFrame")
-    action_row.grid(row=6, column=1, sticky="ew", padx=10, pady=(16, 0))
+    action_row.grid(row=3, column=0, columnspan=3, sticky="ew", padx=10, pady=(18, 0))
 
     start_btn = ttk.Button(action_row, text="Start organizing", command=run_task, style="Main.TButton")
     start_btn.pack(side="left")
-    ttk.Label(action_row, textvariable=status_var, style="Main.TLabel").pack(side="right")
+    ttk.Label(action_row, textvariable=status_var, style="Status.TLabel").pack(side="right")
 
-    frm.columnconfigure(1, weight=1)
+    frm.columnconfigure(0, weight=1)
+    input_section.columnconfigure(1, weight=1)
+    threshold_section.columnconfigure(1, weight=1)
     root.mainloop()
 
 
